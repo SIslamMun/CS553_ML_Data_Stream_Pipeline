@@ -95,3 +95,22 @@ def word_count(input_path, output_path):
     env.execute()
 
 
+if __name__ == '__main__':
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--input',
+        dest='input',
+        required=False,
+        help='Input file to process.')
+    parser.add_argument(
+        '--output',
+        dest='output',
+        required=False,
+        help='Output file to write results to.')
+
+    argv = sys.argv[1:]
+    known_args, _ = parser.parse_known_args(argv)
+
+    word_count(known_args.input, known_args.output)
