@@ -1,26 +1,41 @@
 from flask import Flask, request, jsonify
+import configparser
 
 import pika
 
 app = Flask(__name__)
 
-# RabbitMQ connection parameters
-rabbitmq_host = 'localhost'
+
+def load_config(config_file="config.ini"):
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return config
+
+config = load_config()
+
+rabbitmq_host = config.get("rabitmq", "host")
+queue = config.get("rabitmq", "queue")
+
+# Connect to RabbitMQ server
+connection = pika.BlockingConnection(pika.ConnectionParameters(rabbitmq_host))
+channel = connection.channel()
+
+def createQueue(channel, queue):
+    try:
+        channel.queue_declare(queue=queue, passive=True)
+        print(f"Queue '{queue}' already exists.")
+    except pika.exceptions.ChannelClosed as e:
+        # Queue does not exist, create it
+        channel.queue_declare(queue=queue)
+        print(f"Queue '{queue}' created.")
 
 @app.route('/produce', methods=['POST'])
 def produce_message():
     try:
         message = request.json['message']
         
-        # Connect to RabbitMQ server
-        connection = pika.BlockingConnection(pika.ConnectionParameters(rabbitmq_host))
-        channel = connection.channel()
 
-        # Create a queue named 'queue1'
-        channel.queue_declare(queue='queue1')
-
-        # Publish the message to the 'queue1' queue
-        channel.basic_publish(exchange='', routing_key='queue1', body=message)
+        channel.basic_publish(exchange='', routing_key=queue, body=message)
 
         # Close the connection
         connection.close()
@@ -40,3 +55,4 @@ def producer_status():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    createQueue(channel, queue)
