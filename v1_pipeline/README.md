@@ -110,17 +110,3 @@ or
   sudo docker run -e DEVICE="cuda" -v [project folder path]:/home/workspace --gpus all -it [image id] --network host bash
   ```
 
-  #### example:
-  ```
-  sudo docker run -e DEVICE="cuda" -v /home/mun/Helios/code/yolov5_inference_deepsparse/Demo:/home/workspace:/home/workspace --gpus all -it 7a79380fe5a5 --network host bash
-  ```
-
- ### For cpu:
-  ```
-  sudo docker run -e DEVICE="cpu" -v [project folder path]:/home/workspace -it [image id] --network host bash
-  ```
-
-  #### example:
-  ```
-  sudo docker run -e DEVICE="cpu" -v /home/mun/Helios/code/yolov5_inference_deepsparse/Demo:/home/workspace --network host -it 7a79380fe5a5 bash
-  ```
