@@ -148,52 +148,33 @@ def run(source,    weights='old_model/person_m_fusion_openvino_model',  # model 
                     # print(names[int(c)])
                     # print(n)
                 
+                # Write results
+                for *xyxy, conf, cls in reversed(det):
+                    if save_txt:  # Write to file
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+                        # with open(f'{txt_path}.txt', 'a') as f:
+                        #     f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
-            #     # Write results
-            #     for *xyxy, conf, cls in reversed(det):
-            #         if save_txt:  # Write to file
-            #             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-            #             line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-            #             with open(f'{txt_path}.txt', 'a') as f:
-            #                 f.write(('%g ' * len(line)).rstrip() % line + '\n')
+                    if save_img or save_crop or view_img:  # Add bbox to image
+                        c = int(cls)  # integer class
+                        label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
+                        annotator.box_label(xyxy, label, color=colors(c, True))
+                    # if save_crop:
+                    #     save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
-            #         if save_img or save_crop or view_img:  # Add bbox to image
-            #             c = int(cls)  # integer class
-            #             label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-            #             annotator.box_label(xyxy, label, color=colors(c, True))
-            #         if save_crop:
-            #             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+            #Stream results
+            im0 = annotator.result()
+            if view_img:
+                if platform.system() == 'Linux' and p not in windows:
+                    windows.append(p)
+                    cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
+                    cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
+                cv2.imshow(str(p), im0)
+                cv2.waitKey(0)  # 1 millisecond
+                cv2.destroyAllWindows() 
 
-            # #Stream results
-            # im0 = annotator.result()
-            # if view_img:
-            #     if platform.system() == 'Linux' and p not in windows:
-            #         windows.append(p)
-            #         cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-            #         cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-            #     cv2.imshow(str(p), im0)
-            #     cv2.waitKey(1)  # 1 millisecond
-
-            # print(im0)
-
-            # # Save results (image with detections)
-            # if save_img:
-            #     if dataset.mode == 'image':
-            #         cv2.imwrite(save_path, im0)
-            #     else:  # 'video' or 'stream'
-            #         if vid_path[i] != save_path:  # new video
-            #             vid_path[i] = save_path
-            #             if isinstance(vid_writer[i], cv2.VideoWriter):
-            #                 vid_writer[i].release()  # release previous video writer
-            #             if vid_cap:  # video
-            #                 fps = vid_cap.get(cv2.CAP_PROP_FPS)
-            #                 w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            #                 h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            #             else:  # stream
-            #                 fps, w, h = 30, im0.shape[1], im0.shape[0]
-            #             save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-            #             vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-            #         vid_writer[i].write(im0)
+            print(im0)
 
         # Print time (inference-only)
         # LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
@@ -205,10 +186,10 @@ def run(source,    weights='old_model/person_m_fusion_openvino_model',  # model 
         avg_fps.append(fps_measure)   
         avg_fps_np = np.array(avg_fps)     
         # LOGGER.info(f'FPS: {np.average(avg_fps_np):.1f}'+"    took "+f"{dt[1].dt * 1E3:.1f}ms    " +f"{s}{'' if len(det) else '(no detections), '}")
-        print("from run:\n")
+        print("from run:")
         LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}")
+        
         print("from flink engine:\n")
-
     return s
         
        
@@ -232,19 +213,22 @@ def flink_streaming_engine(input_path):
 
     
     # # compute word count
-    ds = ds.flat_map(run)
+    ds = ds.flat_map(run,output_type=Types.STRING())
 
     # # define the sink
 
-    # print("Printing result to stdout: ")
+    
     ds.print()
-    # 4. create sink and emit result to sink
-    # output_path = 'data/output'
-    # file_sink = FileSink \
-    #     .for_row_format(output_path, Encoder.simple_string_encoder()) \
-    #     .with_output_file_config(OutputFileConfig.builder().with_part_prefix('pre').with_part_suffix('suf').build()) \
-    #     .build()
-    # ds.sink_to(file_sink)
+    ds.sink_to(
+        sink=FileSink.for_row_format(
+            base_path='data/output',
+            encoder=Encoder.simple_string_encoder())
+        .with_output_file_config(
+            OutputFileConfig.builder()
+            .build())
+        .with_rolling_policy(RollingPolicy.default_rolling_policy())
+        .build()
+    )
 
     # submit for execution
     env.execute()
@@ -272,8 +256,8 @@ if __name__ == '__main__':
 
     data = []
 
-    video_path = 'data/images/test.png'
-    # video_path = 'data/single_person.mp4'
+    # video_path = 'data/images/test.png'
+    video_path = 'data/single_person.mp4'
     data.append(""+ video_path + "")
 
     # print(video_path)
