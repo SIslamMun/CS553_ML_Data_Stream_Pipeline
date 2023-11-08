@@ -1,9 +1,13 @@
 import base64
+import time
 from flask import Flask, request, jsonify
 import configparser
 import logging
 import pika
 import sys
+import uuid
+import json
+
 
 app = Flask(__name__)
 
@@ -24,7 +28,8 @@ def load_config(config_file="config.ini"):
 config = load_config()
 
 rabbitmq_host = config.get("rabitmq", "host")
-queue = config.get("rabitmq", "queue")
+message_queue = config.get("rabitmq", "message_queue")
+acknowledgment_queue = config.get("rabitmq", "acknowledgment_queue")
 
 # Connect to RabbitMQ server
 connection = pika.BlockingConnection(pika.ConnectionParameters(rabbitmq_host))
@@ -34,7 +39,7 @@ def createQueue(channel, queue):
     try:
         channel.queue_declare(queue=queue, passive=True)
         logger.info(f"Queue '{queue}' already exists.")
-    except pika.exceptions.ChannelClosed as e:
+    except:
         # Queue does not exist, create it
         channel.queue_declare(queue=queue)
         logger.info(f"Queue '{queue}' created.")
@@ -43,14 +48,42 @@ def createQueue(channel, queue):
 def produce_message():
     try:
         # message = request.json['message']
+        unique_id = str(uuid.uuid4())
         message = request.files.get('image')
         if message:
             image_data = base64.b64encode(message.read()).decode()
-            channel.basic_publish(exchange='', routing_key=queue, body=image_data)
-        # Close the connection
-            connection.close()
-            logger.info("Pushed image to the queue")
-            return jsonify({"status": "Message sent successfully"})
+            
+            channel.basic_publish(exchange='', routing_key=message_queue, body=json.dumps({
+                                                                        'data': image_data
+                                                                    }), properties=pika.BasicProperties(reply_to = acknowledgment_queue, 
+                                                          correlation_id = unique_id),)
+            
+            logger.info("{} Pushed image to the queue".format(unique_id))
+
+            logger.info("{} waiting for response from consumer".format(unique_id))
+
+           
+            timeout = 10
+            start_time = time.time()
+
+            while True:
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= timeout:
+                    print(f"Timeout: Did not receive acknowledgment for unique ID: {unique_id}")
+                    break
+
+                method_frame, header_frame, body = channel.basic_get(queue=acknowledgment_queue, auto_ack=True)
+                
+                if method_frame:
+                    # print(f"{method_frame}, {header_frame}, {body}")
+                    if header_frame.correlation_id == unique_id:
+                        logger.info(f"{unique_id} Received ack response from consumer")
+                        break
+                    else:
+                        logger.info("different uniqueID recieved")                
+
+            # connection.close()
+            return jsonify({"status":"Success"})
         else:
             logger.info("Image not provided in the request input")
             return jsonify({"status": "request failed"})
@@ -69,4 +102,5 @@ def producer_status():
 
 if __name__ == '__main__':
     app.run(debug=True)
-    createQueue(channel, queue)
+    createQueue(channel, message_queue)
+    createQueue(channel, acknowledgment_queue)
