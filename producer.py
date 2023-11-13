@@ -1,22 +1,21 @@
 import base64
 import time
-from flask import Flask, request, jsonify
 import configparser
 import logging
 import pika
 import sys
 import uuid
 import json
+from aiohttp import web
 
 
-app = Flask(__name__)
 
 stream_handler = logging.StreamHandler(sys.stdout)
 log_formatter = logging.Formatter(
     '%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 stream_handler.setFormatter(log_formatter)
 log_level = logging.INFO #TODO later
-logger = logging.getLogger("pipeline")
+logger = logging.getLogger("producer")
 logger.setLevel(log_level)
 logger.addHandler(stream_handler)
 
@@ -44,14 +43,15 @@ def createQueue(channel, queue):
         channel.queue_declare(queue=queue)
         logger.info(f"Queue '{queue}' created.")
 
-@app.route('/produce', methods=['POST'])
-def produce_message():
+async def producer_message(request):
     try:
+        data = await request.post()
         # message = request.json['message']
         unique_id = str(uuid.uuid4())
-        message = request.files.get('image')
+        message = data.get('image')
         if message:
-            image_data = base64.b64encode(message.read()).decode()
+            image = message.file.read()
+            image_data = base64.b64encode(image).decode()
             
             channel.basic_publish(exchange='', routing_key=message_queue, body=json.dumps({
                                                                         'data': image_data
@@ -82,25 +82,28 @@ def produce_message():
                     else:
                         logger.info("different uniqueID recieved")                
 
-            # connection.close()
-            return jsonify({"status":"Success"})
+            connection.close()
+            return web.json_response({"status":"Success"})
         else:
             logger.info("Image not provided in the request input")
-            return jsonify({"status": "request failed"})
+            return web.json_response({"status": "request failed"})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return web.json_response({"error": str(e)})
 
 
-@app.route('/produce', methods=['GET'])
-def producer_status():
+async def producer_status(request):
     try:
-        return jsonify({"Status":"RabitMQ is running"})
+        return web.json_response({"Status":"RabitMQ is running"})
     except:
-        return jsonify({"Status":"RabitMQ is down"})
+        return web.json_response({"Status":"RabitMQ is down"})
 
+app = web.Application()
+app.router.add_get('/', producer_status)
+app.router.add_post('/pushImage', producer_message)
 
 if __name__ == '__main__':
-    app.run(debug=True)
     createQueue(channel, message_queue)
     createQueue(channel, acknowledgment_queue)
+    web.run_app(app)
+
