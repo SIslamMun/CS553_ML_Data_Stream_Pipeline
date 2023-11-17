@@ -296,14 +296,14 @@ class LoadImages:
 
             self.frame += 1
             # im0 = self._cv2_rotate(im0)  # for use if cv2 autorotation is False
-            s = f'video {self.count + 1}/{self.nf} ({self.frame}/{self.frames}) {path}: '
+            # s = f'video {self.count + 1}/{self.nf} ({self.frame}/{self.frames}) {path}: '
 
         else:
             # Read image
             self.count += 1
             im0 = cv2.imread(path)  # BGR
             assert im0 is not None, f'Image Not Found {path}'
-            s = f'image {self.count}/{self.nf} {path}: '
+            # s = f'image {path}: '
 
         if self.transforms:
             im = self.transforms(im0)  # transforms
@@ -312,7 +312,7 @@ class LoadImages:
             im = im.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
             im = np.ascontiguousarray(im)  # contiguous
 
-        return path, im, im0, self.cap, s
+        return path, im, im0, self.cap, 
 
     def _new_video(self, path):
         # Create a new video capture object

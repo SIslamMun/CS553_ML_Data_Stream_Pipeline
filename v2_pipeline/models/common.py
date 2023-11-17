@@ -367,7 +367,7 @@ class MultiModel(nn.Module):
             if 'stride' in meta:
                 stride, names = int(meta['stride']), eval(meta['names'])
         elif xml:  # OpenVINO
-            LOGGER.info(f'Loading {w} for OpenVINO inference...')
+            # LOGGER.info(f'Loading {w} for OpenVINO inference...')
             check_requirements('openvino')  # requires openvino-dev: https://pypi.org/project/openvino-dev/
             from openvino.runtime import Core, Layout, get_batch
             ie = Core()

@@ -1,4 +1,3 @@
-__Author__ = "Soumil Nitin Shah "
 
 try:
     import pika
